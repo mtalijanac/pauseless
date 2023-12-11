@@ -56,12 +56,12 @@ import lombok.RequiredArgsConstructor;
  * Additional benefit is using InternTrie as temporary buffer.
  * Assume deserialization which happens only sporadically, during which large
  * number of recurring objects are deserialized and instantiated.
- * By instanting InternTrie at start of deserialization, the one can
+ * By instantiating InternTrie at start of deserialization, the one can
  * deseriliaze repeating objects only once, and than remove InternTrie from
  * scope as job is done leaving to GC to collect all interned values. <br>
  *
  * Yet another benefit of ItnerTrie is an ability to intern any object type.
- * As byte data is used as key of object, actual type/conent of object in
+ * As byte data is used as key of object, actual type/content of object in
  * Java form is irrelevant. Thus it is possible to use InternTrie also
  * as intern for other types like Long and Integer, or any other pojo etc..
  */
