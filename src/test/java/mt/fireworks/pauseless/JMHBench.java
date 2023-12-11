@@ -13,6 +13,16 @@ import org.openjdk.jmh.runner.options.*;
 import lombok.Cleanup;
 
 
+/**
+ * CPU: i7-11850H @ 2.5 GHz
+ * VM version: JDK 17.0.9, OpenJDK 64-Bit Server VM, 17.0.9+9
+ *
+ * Benchmark               Mode  Cnt   Score   Error   Units
+ * JMHBench.internTrie    thrpt       31.690          ops/us
+ * JMHBench.newString     thrpt       72.583          ops/us
+ * JMHBench.stringIntern  thrpt       15.518          ops/us
+ */
+
 public class JMHBench {
     static String filename = "pauseless.txt";
 
@@ -37,7 +47,7 @@ public class JMHBench {
     }
 
     public static void main(String[] args) throws Exception {
-        String path = setupBechmarkData(10_000, 100, 48, 55);
+        String path = setupBechmarkData(10_000, 100, 1, 15);
         long len = new File(path).length();
         System.out.println("Testa data prepared at: '" + path + "' (" + len + " bytes)");
 
@@ -130,7 +140,7 @@ public class JMHBench {
         String[] randomStrings = new String[numberOfUniqueStrings];
         for (int i = 0; i < randomStrings.length; i++) {
             int len = rng.nextInt(minStringLen, maxStringLen);
-            randomStrings[i] = randomAlphanumeric(len);
+            randomStrings[i] = RandomStringUtils.randomAlphanumeric(len);
         }
 
         FileWriter fw = new FileWriter(testData, false);
@@ -146,32 +156,4 @@ public class JMHBench {
         return path;
     }
 
-
-    static String randomAlphanumeric(int len) {
-        // num ASCII range: 48 - 57
-        // A-Z ASCII range: 65 - 90
-        // a-z ASCII range: 97 - 122
-
-        char[] cs = new char[len];
-        ThreadLocalRandom rng = ThreadLocalRandom.current();
-
-        for (int i = 0; i < len; i++) {
-            int rn = rng.nextInt(62);
-            char ch = 0;
-            if (rn < 10) {
-                ch = (char) ((int) '0' + rn);
-            }
-            else if (10 <= rn && rn < 36) {
-                ch = (char) ((int) 'A' + rn - 10);
-            }
-            else {
-                ch = (char) ((int) 'a' + rn - 36);
-            }
-
-            cs[i] = ch;
-        }
-
-        String res = new String(cs);
-        return res;
-    }
 }
