@@ -9,50 +9,80 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 /**
- * InternTrie je mapa keširanih stringova koja služi kao
- * alternativa {@code String#intern()} operaciji.
+ * Map/Trie structure used for object intern during object deserialization.
+ * This structure has better performance than {@link String#intern()}
+ * while simultaneously avoiding GC overhead as only objects seen
+ * for first time are deseriliazied. <br>
  *
- * Osnovna optimizacija SerdesTriea je da ne zahtjeva instanciran
- * string da bi napravio intern, već prima sirovo polje bajtova.
+ * While deserializing objects it is usually quite normal to:
+ *  - create vast number of small objects whiting short duration,
+ *    putting pressure on GC
+ *  - significant portion of objects are recurring values
  *
- * Klasa je thread safe.
+ * In case of String objects, there is {@code String#intern()} method
+ * used to add/get canonical String representation. However to invoke
+ * this method one needs a string object, thus deserialization and
+ * allocation penalty is allready present: <br>
  *
+ *    byte[] data = .... // example array containing string data
+ *    String myString = new String(data).intern(); // first create, than intern
+ *
+ *
+ * InternTrie is structure created for this usecase:<br>
+ *
+ *   InternTrie<String> myInternTrie = new InternTrie();
+ *
+ *   byte[] data = .... // example array containing string data
+ *   String myString = myInternTrie.intern(data, (obj, off, len) -> new String(obj, off, len));
+ *
+ * InternTrie stores object in internal map/true structure and uses
+ * data as internal key for instantiated object. Thus objects which are
+ * recurring are instantiated only once. <br>
+ *
+ * Primary value of using InternTrie is for very short objects.
+ * The longer the object data is, the less chance for object being recurring
+ * and the longer lookup takes. <br>
+ *
+ * Short strings (less than 8 bytes) are instantiated about twice as slow
+ * as just instancing string with new. This is still much faster than
+ * instancing string and than invoking intern operation. The longer data key
+ * is, more fetches within trie are needed thus performance starts to fall.
+ * At about data keys beyond ~50 bytes performance is on par with new/intern
+ * combo. However this is only true if allocation rate is considered, as
+ * InternTrie will not consume any additional memory for occurring objects
+ * and thus lowers avoids GC enforced bottlenecks as repeating objects
+ * are deserialized only once. <br>
+ *
+ * Additional benefit is using InternTrie as temporary buffer.
+ * Assume deserialization which happens only sporadically, during which large
+ * number of recurring objects are deserialized and instantiated.
+ * By instanting InternTrie at start of deserialization, the one can
+ * deseriliaze repeating objects only once, and than remove InternTrie from
+ * scope as job is done leaving to GC to collect all interned values. <br>
  */
 public class InternTrie<T> {
 
-    interface Unmarshaller<T> {
+    public interface Unmarshaller<T> {
         T unmarshall(byte[] objData, int off, int len);
     }
 
-    final TrieNode<T> root = new TrieNode<>(0);
+    final TrieNode<T> root = new TrieNode<T>(0l);
 
     public T intern(byte[] objData, Unmarshaller<T> unmarshaller) {
-        return computeIfAbsent(objData, 0, objData.length, unmarshaller);
+        return intern(objData, 0, objData.length, unmarshaller);
     }
 
 
-    public T computeIfAbsent(byte[] objData, int off, int len, Unmarshaller<T> unmarshaller) {
-
+    public T intern(byte[] objData, int off, int len, Unmarshaller<T> unmarshaller) {
         TrieNode<T> current = root;
         for (int idx = off; idx < len; idx += 8) {
-
-            // kodiraj byte[] u longove
-            long nodeKey = 0;
-            int endIdx = Math.min(len, idx + 8);
-            for (int jdx = idx; jdx < endIdx; jdx++) {
-                byte b = objData[jdx];
-                nodeKey = (nodeKey << 8) | (0xff & b);
-            }
-
-            // sve dok je ključ dugačak 8 bajtova spusti se na idući node stabla
-            // za kraće vrijednosti pročitaj gotovu vrijednost iz mape.
-            int keyLen = endIdx - idx;
-            if (keyLen >= 8) {
-                current = current.childNode(nodeKey);
-            }
-            else {
+            long nodeKey = BitsAndBytes.bytes2long(objData, idx, 8);
+            int keyLen = Math.min(objData.length - idx, 8);
+            if (keyLen < 8) {
                 return current.childValue(nodeKey, unmarshaller, objData, off, len);
             }
+
+            current = current.childNode(nodeKey);
         }
 
         T value = current.getValue(unmarshaller, objData, off, len);
@@ -64,6 +94,7 @@ public class InternTrie<T> {
     static class TrieNode<T> {
 
         @NonNull long nodeKey;
+
         T value;
         MutableLongObjectMap<Object> children;
 
