@@ -15,7 +15,7 @@ import lombok.RequiredArgsConstructor;
  * for first time are deseriliazied. <br>
  *
  * While deserializing objects it is usually quite normal to:
- *  - create vast number of small objects whiting short duration,
+ *  - create vast number of small objects within short timespan,
  *    putting pressure on GC
  *  - significant portion of objects are recurring values
  *
@@ -31,7 +31,6 @@ import lombok.RequiredArgsConstructor;
  * InternTrie is structure created for this usecase:<br>
  *
  *   InternTrie<String> myInternTrie = new InternTrie();
- *
  *   byte[] data = .... // example array containing string data
  *   String myString = myInternTrie.intern(data, (obj, off, len) -> new String(obj, off, len));
  *
@@ -39,8 +38,9 @@ import lombok.RequiredArgsConstructor;
  * data as internal key for instantiated object. Thus objects which are
  * recurring are instantiated only once. <br>
  *
- * Primary value of using InternTrie is for very short objects.
- * The longer the object data is, the less chance for object being recurring
+ * Primary value of using InternTrie is visible on very short objects.
+ * Strings like "1" or "true" or "Y" are very common. The longer the
+ * object data is, the less chance for object being recurring
  * and the longer lookup takes. <br>
  *
  * Short strings (less than 8 bytes) are instantiated about twice as slow
@@ -59,6 +59,11 @@ import lombok.RequiredArgsConstructor;
  * By instanting InternTrie at start of deserialization, the one can
  * deseriliaze repeating objects only once, and than remove InternTrie from
  * scope as job is done leaving to GC to collect all interned values. <br>
+ *
+ * Yet another benefit of ItnerTrie is an ability to intern any object type.
+ * As byte data is used as key of object, actual type/conent of object in
+ * Java form is irrelevant. Thus it is possible to use InternTrie also
+ * as intern for other types like Long and Integer, or any other pojo etc..
  */
 public class InternTrie<T> {
 
@@ -71,7 +76,6 @@ public class InternTrie<T> {
     public T intern(byte[] objData, Unmarshaller<T> unmarshaller) {
         return intern(objData, 0, objData.length, unmarshaller);
     }
-
 
     public T intern(byte[] objData, int off, int len, Unmarshaller<T> unmarshaller) {
         TrieNode<T> current = root;
