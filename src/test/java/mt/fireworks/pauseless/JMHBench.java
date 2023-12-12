@@ -18,9 +18,9 @@ import lombok.Cleanup;
  * VM version: JDK 17.0.9, OpenJDK 64-Bit Server VM, 17.0.9+9
  *
  * Benchmark               Mode  Cnt   Score   Error   Units
- * JMHBench.internTrie    thrpt       31.690          ops/us
- * JMHBench.newString     thrpt       72.583          ops/us
- * JMHBench.stringIntern  thrpt       15.518          ops/us
+ * JMHBench.internTrie    thrpt    5  30.659 ± 1.262  ops/us
+ * JMHBench.newString     thrpt    5  79.764 ± 4.203  ops/us
+ * JMHBench.stringIntern  thrpt    5  16.173 ± 2.413  ops/us
  */
 
 public class JMHBench {
@@ -56,8 +56,8 @@ public class JMHBench {
                 .forks(1)
                 .warmupIterations(1)
                 .warmupTime(TimeValue.seconds(3))
-                .measurementIterations(1)
-                .measurementTime(TimeValue.seconds(10))
+                .measurementIterations(5)
+                .measurementTime(TimeValue.seconds(3))
                 .timeUnit(TimeUnit.MICROSECONDS)
                 .mode(Mode.Throughput)
                 .shouldDoGC(false)
