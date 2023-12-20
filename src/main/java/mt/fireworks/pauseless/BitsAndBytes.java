@@ -9,9 +9,9 @@ public class BitsAndBytes {
         if (offset >= bytes.length)
             throw new IllegalArgumentException("offset beyond byte array length");
 
-        int endIdx = Math.min(offset + len, bytes.length);
+        final int endIdx = Math.min(offset + len, bytes.length);
         long val = 0;
-        for (int idx = 0; idx < endIdx; idx++) {
+        for (int idx = offset; idx < endIdx; idx++) {
             byte b = bytes[idx];
             val = (val << 8) | (0xFFl & b);
         }

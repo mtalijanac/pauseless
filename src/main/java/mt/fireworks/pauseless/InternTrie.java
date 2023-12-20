@@ -79,7 +79,7 @@ public class InternTrie<T> {
 
     public T intern(byte[] objData, int off, int len, Unmarshaller<T> unmarshaller) {
         TrieNode<T> current = root;
-        for (int idx = off; idx < len; idx += 8) {
+        for (int idx = off; idx < off + len; idx += 8) {
             long nodeKey = BitsAndBytes.bytes2long(objData, idx, 8);
             int keyLen = Math.min(objData.length - idx, 8);
             if (keyLen < 8) {
