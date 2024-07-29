@@ -1,12 +1,14 @@
 package mt.fireworks.pauseless;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
 import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
 
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import lombok.*;
 
 /**
  * Map/Trie structure used for object intern during object deserialization.
@@ -71,7 +73,7 @@ public class InternTrie<T> {
         T unmarshall(byte[] objData, int off, int len);
     }
 
-    final TrieNode<T> root = new TrieNode<T>(0l);
+    final TrieNode<T> root = new TrieNode<>(0l);
 
     public T intern(byte[] objData, Unmarshaller<T> unmarshaller) {
         return intern(objData, 0, objData.length, unmarshaller);
@@ -100,30 +102,69 @@ public class InternTrie<T> {
         @NonNull long nodeKey;
 
         T value;
-        MutableLongObjectMap<Object> children;
+
+        final AtomicReference<
+                MutableLongObjectMap<
+                    AtomicReference<
+                        Object>>> childrenRef = new AtomicReference<>();
+
+        final ReentrantReadWriteLock rwlock = new ReentrantReadWriteLock();
 
 
-        public synchronized MutableLongObjectMap<Object> getChildren() {
-            if (children == null) {
-                children = new LongObjectHashMap<>();
-            }
+        public MutableLongObjectMap<AtomicReference<Object>> getChildren() {
+            MutableLongObjectMap<AtomicReference<Object>> children = childrenRef.get();
+            if (children != null) return children;
 
+            children = new LongObjectHashMap<>();
+            boolean compareAndSetRes = childrenRef.compareAndSet(null, children);
+            if (compareAndSetRes) return children;
+
+            children = childrenRef.get();
             return children;
         }
 
-        public synchronized TrieNode<T> childNode(long nodeKey) {
-            TrieNode<T> child = (TrieNode<T>) getChildren().getIfAbsentPutWithKey(nodeKey, k -> new TrieNode<>(k));
-            return child;
+
+        public TrieNode<T> childNode(long nodeKey) {
+            MutableLongObjectMap<AtomicReference<Object>> children = getChildren();
+
+            AtomicReference<Object> ref = children.get(nodeKey);
+            if (ref != null) {
+                TrieNode<T> child = (TrieNode<T>) ref.get();
+                return child;
+            }
+
+            @Cleanup("unlock") WriteLock lock = rwlock.writeLock();
+            lock.lock();
+            AtomicReference<Object> childRef = (AtomicReference<Object>)
+                children.getIfAbsentPutWithKey(nodeKey, k -> new AtomicReference<>(new TrieNode<>(k)));
+
+            TrieNode<T> res = (TrieNode<T>) childRef.get();
+            return res;
         }
 
-        public synchronized T childValue(long nodeKey, Unmarshaller<T> supplier, byte[] key, int off, int len) {
-            T val = (T) getChildren().getIfAbsentPutWithKey(nodeKey,
-                    k -> supplier.unmarshall(key, off, len)
+
+        /** Read value stored under nodeKey */
+        public T childValue(long nodeKey, Unmarshaller<T> supplier, byte[] key, int off, int len) {
+            MutableLongObjectMap<AtomicReference<Object>> children = getChildren();
+
+            AtomicReference<Object> ref = children.get(nodeKey);
+            if (ref != null) {
+                T val = (T) ref.get();
+                return val;
+            }
+
+            @Cleanup("unlock") WriteLock lock = rwlock.writeLock();
+            lock.lock();
+
+            AtomicReference<T> valRef = (AtomicReference<T>) children.getIfAbsentPutWithKey(nodeKey,
+                    k -> new AtomicReference(supplier.unmarshall(key, off, len))
             );
+            T val = valRef.get();
             return val;
         }
 
-        public synchronized T getValue(Unmarshaller<T> supplier, byte[] key, int off, int len) {
+
+        public T getValue(Unmarshaller<T> supplier, byte[] key, int off, int len) {
             if (this.value != null) {
                 return this.value;
             }
@@ -153,12 +194,14 @@ public class InternTrie<T> {
     void about(TrieNode node, AtomicInteger nodeCount, AtomicInteger mapCount, AtomicInteger valueCount) {
         nodeCount.incrementAndGet();
         if (node.value != null) valueCount.incrementAndGet();
-        if (node.children == null) return;
+        if (node.childrenRef.get() == null) return;
 
         mapCount.incrementAndGet();
 
-        node.children.keySet().forEach(each -> {
-            Object obj = node.children.get(each);
+        MutableLongObjectMap<Object> children = (MutableLongObjectMap<Object>) node.childrenRef.get();
+
+        children.keySet().forEach(each -> {
+            Object obj = node.getChildren().get(each);
             if (obj instanceof TrieNode) {
                 TrieNode<T> t = (TrieNode<T>) obj;
                 about(t, nodeCount, mapCount, valueCount);
