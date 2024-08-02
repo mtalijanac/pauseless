@@ -69,21 +69,71 @@ import lombok.*;
  */
 public class InternTrie<T> {
 
+
+    /**
+     * Interface for unmarshalling byte arrays into objects of type T.
+     *
+     * @param <T> The type of object to be unmarshalled.
+     */
     public interface Unmarshaller<T> {
+        T unmarshall(byte[] objData);
+    }
+
+    /**
+     * Interface for unmarshalling byte arrays into objects of type T.
+     * It adds offset logic to basic <code>Unmarshaller</code>.
+     *
+     * @param <T> The type of object to be unmarshalled.
+     */
+    public interface UnmarshallerWithOffset<T> {
         T unmarshall(byte[] objData, int off, int len);
     }
 
+
+
+
     final TrieNode<T> root = new TrieNode<>(0l);
 
+    /**
+     * Interns an object based on its byte array representation.
+     *
+     * @param objData      The byte array representation of the object.
+     * @param unmarshaller The unmarshaller to convert byte array to object.
+     * @return The interned object.
+     */
     public T intern(byte[] objData, Unmarshaller<T> unmarshaller) {
+        return intern(objData, 0, objData.length, (data, off, len) -> unmarshaller.unmarshall(data));
+    }
+
+
+    /**
+     * Interns an object based on its byte array representation.
+     *
+     * @param objData      The byte array representation of the object.
+     * @param unmarshaller The unmarshaller to convert byte array to object.
+     * @return The interned object.
+     */
+    public T intern(byte[] objData, UnmarshallerWithOffset<T> unmarshaller) {
         return intern(objData, 0, objData.length, unmarshaller);
     }
 
-    public T intern(byte[] objData, int off, int len, Unmarshaller<T> unmarshaller) {
+
+
+    /**
+     * Interns an object based on its byte array representation.
+     *
+     * @param objData      The byte array representation of the object.
+     * @param off          The starting offset in the byte array.
+     * @param len          The length of the byte array to use.
+     * @param unmarshaller The unmarshaller to convert byte array to object.
+     * @return The interned object.
+     */
+    public T intern(byte[] objData, int off, int len, UnmarshallerWithOffset<T> unmarshaller) {
         TrieNode<T> current = root;
-        for (int idx = off; idx < off + len; idx += 8) {
-            long nodeKey = BitsAndBytes.bytes2long(objData, idx, 8);
-            int keyLen = Math.min(objData.length - idx, 8);
+        int endIdx = off + len;
+        for (int idx = off; idx < endIdx; idx += 8) {
+            int keyLen = Math.min(endIdx - idx, 8);
+            long nodeKey = BitsAndBytes.bytes2long(objData, idx, keyLen);
             if (keyLen < 8) {
                 return current.childValue(nodeKey, unmarshaller, objData, off, len);
             }
@@ -144,7 +194,7 @@ public class InternTrie<T> {
 
 
         /** Read value stored under nodeKey */
-        public T childValue(long nodeKey, Unmarshaller<T> supplier, byte[] key, int off, int len) {
+        public T childValue(long nodeKey, UnmarshallerWithOffset<T> supplier, byte[] key, int off, int len) {
             MutableLongObjectMap<AtomicReference<Object>> children = getChildren();
 
             AtomicReference<Object> ref = children.get(nodeKey);
@@ -164,7 +214,7 @@ public class InternTrie<T> {
         }
 
 
-        public T getValue(Unmarshaller<T> supplier, byte[] key, int off, int len) {
+        public T getValue(UnmarshallerWithOffset<T> supplier, byte[] key, int off, int len) {
             if (this.value != null) {
                 return this.value;
             }

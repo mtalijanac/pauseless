@@ -14,6 +14,32 @@ public class InternTrieTest {
 
 
     @Test
+    public void offsetTest() {
+        InternTrie<String> internTrie = new InternTrie<String>();
+
+        String a = "example";
+        byte[] abytes = a.getBytes(US_ASCII);
+        String a2 = internTrie.intern(abytes, (data) -> new String(data, US_ASCII));
+        assertEquals(a, a2);
+
+
+        String b = "usage example";
+        byte[] bbytes = b.getBytes(US_ASCII);
+        String b2 = internTrie.intern(bbytes, b.indexOf(a), a.length(), (data, off, len) -> new String(data, off, len, US_ASCII));
+        assertEquals(a, b2);
+
+        String c = "uninspiring example of usage";
+        byte[] cbytes = c.getBytes(US_ASCII);
+        String c2 = internTrie.intern(cbytes, c.indexOf(a), a.length(), (data, off, len) -> new String(data, off, len, US_ASCII));
+        assertEquals(a, c2);
+
+
+        assertSame(a2, b2);
+        assertSame(a2, c2);
+    }
+
+
+    @Test
     public void testStringTrie() {
         InternTrie<String> internTrie = new InternTrie<String>();
 
@@ -33,6 +59,9 @@ public class InternTrieTest {
 
         String val2 = internTrie.intern(bytes, (objData, off, len) -> new String(objData, off, len, US_ASCII));
         assertSame(val1, val2);
+
+        String val3 = internTrie.intern(bytes, (objData) -> new String(objData, US_ASCII));
+        assertSame(val1, val3);
     }
 
 
@@ -116,5 +145,51 @@ public class InternTrieTest {
         }
     }
 
+
+    @Test
+    public void offsetTest2() {
+        final InternTrie<String> it = new InternTrie<String>();
+        final String adaText = "ada".intern();
+
+        {
+            byte[] adaBytes = "ada".getBytes(UTF_8);
+            String adaIntern = it.intern(adaBytes, (data) -> new String(data, UTF_8).intern());
+            assertSame(adaText, adaIntern);
+        }
+
+        {
+            byte[] adaBytes = "ada".getBytes(UTF_8);
+            String adaIntern = it.intern(adaBytes, (data, off, len) -> new String(data, off, len, UTF_8).intern());
+            assertSame(adaText, adaIntern);
+        }
+
+        {
+            byte[] adaBytes = "adadada".getBytes(UTF_8);
+
+            String adaIntern_1 = it.intern(adaBytes, 0, 3, (data, off, len) -> new String(data, off, len, UTF_8).intern());
+            assertSame(adaText, adaIntern_1);
+
+            String adaIntern_2 = it.intern(adaBytes, 2, 3, (data, off, len) -> new String(data, off, len, UTF_8).intern());
+            assertSame(adaText, adaIntern_2);
+
+            String adaIntern_3 = it.intern(adaBytes, 4, 3, (data, off, len) -> new String(data, off, len, UTF_8).intern());
+            assertSame(adaText, adaIntern_3);
+        }
+
+        {
+            String alphabet = "abcdefghijklmnopqrstuvwxyz";
+            byte[] bytes = alphabet.getBytes(US_ASCII);
+
+            for (int i = 0; i < alphabet.length(); i++) {
+                for (int j = i + 1; j <= alphabet.length(); j++) {
+                    String subString = alphabet.substring(i, j).intern();
+                    String internVal = it.intern(bytes, i, j-i, (data, off, len) -> new String(data, off, len, UTF_8).intern());
+
+                    assertEquals(subString, internVal);
+                    assertSame(subString, internVal);
+                }
+            }
+        }
+    }
 
 }
