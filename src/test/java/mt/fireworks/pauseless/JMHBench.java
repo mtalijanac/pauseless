@@ -47,7 +47,7 @@ public class JMHBench {
     }
 
     public static void main(String[] args) throws Exception {
-        String path = setupBechmarkData(10_000, 100, 1, 15);
+        String path = setupBechmarkData(10_000, 100, 1, 12);
         long len = new File(path).length();
         System.out.println("Testa data prepared at: '" + path + "' (" + len + " bytes)");
 
@@ -57,7 +57,33 @@ public class JMHBench {
                 .warmupIterations(1)
                 .warmupTime(TimeValue.seconds(3))
                 .measurementIterations(5)
+//                .measurementTime(TimeValue.minutes(10))
                 .measurementTime(TimeValue.seconds(3))
+                .jvmArgsAppend(
+//                        "-Xmx32m"
+//                        "-Xmx256m"
+                        "-Xmx1g"
+//                        "-Xmx4g"
+
+                        ,"-XX:+UseCompressedOops"
+
+                        // ZGC, defaultni and generational (new in JDK21)
+                        , "-XX:+UnlockExperimentalVMOptions"
+
+//                         , "-XX:+UseZGC"
+//                         , "-XX:+ZGenerational"
+
+//                      , "-XX:+UseShenandoahGC"
+//                      , "-XX:ShenandoahGCMode=generational"
+
+                      , "-XX:+UseG1GC"
+                      , "-XX:+UseStringDeduplication"
+//                      , "-XX:+UseSerialGC"
+//                      , "-XX:+UseParallelGC"
+
+                        // , "-XX:+UnlockCommercialFeatures"
+//                        , "-XX:+FlightRecorder"
+                )
                 .timeUnit(TimeUnit.MICROSECONDS)
                 .mode(Mode.Throughput)
                 .shouldDoGC(false)
@@ -135,6 +161,8 @@ public class JMHBench {
         String tmpdir = System.getProperty("java.io.tmpdir");
         File testData = new File(tmpdir + JMHBench.filename);
 
+        // Uncomment to create test data:
+        /*
         ThreadLocalRandom rng = ThreadLocalRandom.current();
 
         String[] randomStrings = new String[numberOfUniqueStrings];
@@ -151,6 +179,7 @@ public class JMHBench {
             bw.write(str);
             bw.write('\n');
         }
+        //*/
 
         String path = testData.getPath();
         return path;
